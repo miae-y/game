@@ -24,6 +24,9 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      width: 100%;
+      max-width: 520px;
+      padding: 10px;
     }
 
     #gameTitle {
@@ -71,6 +74,66 @@
       box-shadow: 0 0 30px #0040ff44, 0 0 60px #0040ff22, inset 0 0 30px #00001a;
       background: #000005;
       display: block;
+      width: 100%;
+      max-width: 480px;
+      height: auto;
+      touch-action: none;
+    }
+
+    #touchControls {
+      display: none;
+      width: 100%;
+      max-width: 480px;
+      margin-top: 14px;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .touch-btn {
+      flex: 1;
+      min-height: 54px;
+      border: 1px solid #0080ff;
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 13px;
+      border-radius: 10px;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .touch-btn.fire {
+      background: rgba(0, 160, 255, 0.75);
+      color: #000;
+    }
+
+    #pauseBtn {
+      display: none;
+      width: 100%;
+      max-width: 480px;
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid #0080ff;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.45);
+      color: #00ffff;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    @media (max-width: 780px) {
+      body { padding: 12px; }
+      #gameWrapper { width: 100%; }
+      #gameTitle { font-size: 22px; margin-bottom: 8px; }
+      #scoreBoard { gap: 18px; margin-bottom: 6px; }
+      .score-label { font-size: 8px; }
+      .score-value { font-size: 12px; }
+      .overlay-title { font-size: 20px; }
+      .overlay-sub, .overlay-press { font-size: 10px; }
+      #touchControls { display: flex; }
+      #pauseBtn { display: block; }
     }
 
     #livesDisplay {
@@ -101,10 +164,13 @@
       align-items: center;
       background: rgba(0,0,10,0.85);
       z-index: 10;
-      pointer-events: none;
+      pointer-events: auto;
     }
 
-    #overlay.hidden { display: none; }
+    #overlay.hidden {
+      display: none;
+      pointer-events: none;
+    }
 
     .overlay-title {
       font-family: 'Press Start 2P', monospace;
@@ -189,6 +255,12 @@
     <span class="lives-label">LIVES:</span>
     <canvas id="livesCanvas" width="120" height="24"></canvas>
   </div>
+  <div id="touchControls">
+    <button class="touch-btn" data-action="left">◀</button>
+    <button class="touch-btn fire" data-action="shoot">FIRE</button>
+    <button class="touch-btn" data-action="right">▶</button>
+  </div>
+  <button id="pauseBtn">PAUSE</button>
 </div>
 
 <script>
@@ -394,6 +466,10 @@ let tractorBeam = null;
 
 // Keys
 const keys = {};
+const touchState = { left: false, right: false, shoot: false };
+const touchControls = document.getElementById('touchControls');
+const pauseBtn = document.getElementById('pauseBtn');
+
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
@@ -404,8 +480,48 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// Overlay helpers
+function syncTouchKeys() {
+  keys['ArrowLeft'] = touchState.left;
+  keys['ArrowRight'] = touchState.right;
+  keys['Space'] = touchState.shoot;
+}
+
+function setTouchAction(action, active) {
+  if (action === 'left' || action === 'right' || action === 'shoot') {
+    touchState[action] = active;
+    syncTouchKeys();
+  }
+}
+
+function pointerAction(event, active) {
+  const action = event.target.dataset.action;
+  if (!action) return;
+  event.preventDefault();
+  setTouchAction(action, active);
+}
+
+touchControls.querySelectorAll('button[data-action]').forEach(btn => {
+  btn.addEventListener('pointerdown', e => {
+    pointerAction(e, true);
+    if (e.pointerId !== undefined) btn.setPointerCapture(e.pointerId);
+  });
+  btn.addEventListener('pointerup', e => pointerAction(e, false));
+  btn.addEventListener('pointercancel', e => pointerAction(e, false));
+  btn.addEventListener('lostpointercapture', e => pointerAction(e, false));
+});
+
+touchControls.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+pauseBtn.addEventListener('click', () => {
+  if (gameState === 'playing') { gameState = 'paused'; showPause(); }
+  else if (gameState === 'paused') { gameState = 'playing'; hidePause(); }
+});
+
 const overlay = document.getElementById('overlay');
+overlay.addEventListener('pointerdown', () => {
+  if (gameState === 'title' || gameState === 'gameover') startGame();
+  else if (gameState === 'paused') { gameState = 'playing'; hidePause(); }
+});
 function showOverlay(title, sub, press) {
   overlay.classList.remove('hidden');
   overlay.innerHTML = `
